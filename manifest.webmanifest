@@ -1,0 +1,17 @@
+{
+  "name": "6 qui prend",
+  "short_name": "6 qui prend",
+  "description": "Le jeu de cartes 6 qui prend, en local : contre l'ordi, passe-passe ou face à face.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f2a1a",
+  "theme_color": "#0f2a1a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
