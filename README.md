@@ -39,3 +39,8 @@ Le jeu sera sur `https://<ton-compte>.github.io/6quiprend/`.
 Sur iPad / iPhone : ouvre l'adresse dans Safari → **Partager → Sur l'écran d'accueil**.
 
 > Après une modification des fichiers, incrémente `CACHE` dans `sw.js` (`6quiprend-v2`, …) pour que l'app installée se mette à jour.
+
+
+## Licence
+
+Tous droits réservés © Maximeavril1869. Code publié pour consultation uniquement ; toute réutilisation exige l'autorisation écrite de l'auteur. Voir le fichier `LICENSE`.
