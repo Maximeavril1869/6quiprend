@@ -1,5 +1,5 @@
 /* Service worker : cache local pour jouer hors ligne. Incrémente CACHE à chaque mise à jour des fichiers. */
-const CACHE = '6quiprend-v2';
+const CACHE = '6quiprend-v3';
 const ASSETS = [
   './',
   'index.html',
@@ -28,6 +28,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  if (new URL(e.request.url).origin !== self.location.origin) return;   // Supabase : jamais via le cache (une coupure réseau doit rester visible)
   e.respondWith(
     caches.match(e.request).then((hit) => {
       const net = fetch(e.request)

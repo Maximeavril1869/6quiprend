@@ -7,7 +7,7 @@
   const LS_SETTINGS = '6qp.settings.v1';
   const LS_SAVE = '6qp.save.v1';
   const LS_ONLINE = '6qp.online.v1';
-  const APP_VERSION = '2';
+  const APP_VERSION = '3';
   const EL = window.EnLigne;
   const BOT_NAMES = ['Bouba', 'Mina', 'Zoé', 'Léo', 'Maxou', 'Inès', 'Tom', 'Éva', 'Sam'];
   const SVGNS = 'http://www.w3.org/2000/svg';

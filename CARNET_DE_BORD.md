@@ -31,3 +31,6 @@ Opérations :
 4. Tests : `tests/e2e/en_ligne.py` (36 vérifications : connexion, code inconnu, 3e personne refusée, choix simultanés, hors ligne puis envoi, reprise, manche complète identique des deux côtés, manche suivante pressée par l'invité, suppression) et `tests/e2e/solo.py`.
 5. Défaut trouvé par les tests et corrigé : après « Reprendre », le menu restait affiché au-dessus de la partie.
 6. Création de ce carnet et de `ARCHITECTURE.md`.
+
+## Version 3 (13/11/2026)
+- Service worker : les requêtes d'une autre origine (Supabase) ne passent plus par le cache (avant, une coupure réseau était masquée par `index.html`).
