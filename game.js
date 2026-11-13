@@ -6,6 +6,9 @@
   const ABORT = { aborted: true };
   const LS_SETTINGS = '6qp.settings.v1';
   const LS_SAVE = '6qp.save.v1';
+  const LS_ONLINE = '6qp.online.v1';
+  const APP_VERSION = '2';
+  const EL = window.EnLigne;
   const BOT_NAMES = ['Bouba', 'Mina', 'Zoé', 'Léo', 'Maxou', 'Inès', 'Tom', 'Éva', 'Sam'];
   const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -36,7 +39,7 @@
   /* ---------- Réglages ---------- */
 
   const DEFAULTS = {
-    mode: 'solo', // solo | pass | face
+    mode: 'solo', // solo | online
     humans: 2,
     names: ['Joueur 1', 'Joueur 2', 'Joueur 3', 'Joueur 4'],
     bots: 3,
@@ -44,6 +47,7 @@
     fast: false,
   };
   let settings = Object.assign({}, DEFAULTS, readJSON(LS_SETTINGS) || {});
+  if (settings.mode !== 'solo' && settings.mode !== 'online') settings.mode = 'online'; // anciens modes passe-passe / face à face
   settings.names = DEFAULTS.names.map((d, i) => (settings.names && settings.names[i]) || d);
 
   /* ---------- État ---------- */
@@ -52,7 +56,7 @@
   let runId = 0; // sert à abandonner une boucle de jeu devenue obsolète
 
   function sleep(ms) {
-    const k = settings.fast ? 0.4 : 1;
+    const k = window.QP_SPEED != null ? window.QP_SPEED : (settings.fast ? 0.4 : 1);
     return new Promise((r) => setTimeout(r, ms * k));
   }
 
@@ -64,8 +68,8 @@
   }
 
   function newGame() {
-    const mode = settings.mode;
-    const nh = mode === 'solo' ? 1 : mode === 'face' ? 2 : settings.humans;
+    const mode = 'solo';
+    const nh = 1;
     const players = [];
     let id = 0;
     for (let i = 0; i < nh; i++) {
@@ -73,7 +77,7 @@
         id: id++,
         name: (settings.names[i] || '').trim() || 'Joueur ' + (i + 1),
         human: true,
-        seat: mode === 'face' && i === 1 ? 'top' : 'bottom',
+        seat: 'bottom',
         hand: [], total: 0, round: 0, picked: null,
       });
     }
@@ -101,7 +105,7 @@
   }
 
   function saveGame() {
-    if (!G) return;
+    if (!G || G.mode === 'online') return;
     writeJSON(LS_SAVE, {
       v: 1, mode: G.mode, target: G.target, round: G.round, turn: G.turn,
       rows: G.rows, seen: Array.from(G.seen),
@@ -167,7 +171,7 @@
     box.innerHTML = '';
     if (!G) return;
     G.players.forEach((p) => {
-      const chip = el('div', 'chip' + (p.picked != null && G.mode === 'face' && p.human ? ' ready' : ''));
+      const chip = el('div', 'chip' + ((G.mode === 'online' ? G.phase === 'pick' && p.picked != null : false) ? ' ready' : ''));
       chip.append(el('div', 'nm', (p.human ? '' : '🤖 ') + p.name));
       const pts = el('div', 'pts');
       pts.append(el('span', 'r', '🐮 ' + p.round));
@@ -222,7 +226,6 @@
   }
 
   function renderAll() {
-    document.body.classList.toggle('face', !!G && G.mode === 'face');
     renderScores();
     renderBoard();
     renderPlayed(null);
@@ -276,46 +279,55 @@
 
   const MODE_HINTS = {
     solo: 'Toi contre des robots.',
-    pass: 'Plusieurs humains sur le même appareil : on se le passe pour choisir sa carte en secret.',
-    face: 'Deux joueurs assis de chaque côté de l’iPad. Chaque main reste cachée tant qu’on ne touche pas « Voir ma main ».',
+    online: 'À deux, chacun sur son appareil (iPhone, iPad, téléphone Android…). Les robots peuvent compléter la table.',
   };
 
   function showMenu() {
     const m = JSON.parse(JSON.stringify(settings));
     const sv = readJSON(LS_SAVE);
+    let olError = '';
     modal((box) => {
       const build = () => {
         box.innerHTML = '';
-        const nh = m.mode === 'solo' ? 1 : m.mode === 'face' ? 2 : m.humans;
-        const minB = m.mode === 'solo' ? 1 : 0;
-        const maxB = 10 - nh;
+        const online = m.mode === 'online';
+        const minB = online ? 0 : 1;
+        const maxB = online ? 8 : 9;
         m.bots = Math.max(minB, Math.min(maxB, m.bots));
 
         box.append(el('h1', 'title', '6 qui prend'));
         box.append(el('p', 'sub', 'Évite de ramasser les têtes de bœuf !'));
 
         const modeField = seg('Mode de jeu',
-          [['solo', 'Contre l’ordi'], ['pass', 'Passe-passe'], ['face', 'Face à face']],
-          m.mode, (v) => { m.mode = v; build(); });
+          [['solo', 'Contre l’ordi'], ['online', 'En ligne']],
+          m.mode, (v) => { m.mode = v; olError = ''; build(); });
         modeField.append(el('div', 'hint', MODE_HINTS[m.mode]));
         box.append(modeField);
 
-        if (m.mode === 'pass') {
-          box.append(stepper('Joueurs humains', m.humans, 2, 4, (v) => { m.humans = v; build(); }));
+        if (online && !EL.connecte()) {
+          const f = el('div', 'field');
+          f.append(el('div', 'lbl', 'Compte pour jouer en ligne'));
+          const em = el('input'); em.type = 'email'; em.placeholder = 'E-mail du compte'; em.autocomplete = 'username'; em.autocapitalize = 'none'; em.id = 'ol-email';
+          const pw = el('input'); pw.type = 'password'; pw.placeholder = 'Mot de passe'; pw.autocomplete = 'current-password'; pw.id = 'ol-pwd';
+          const go = el('button', 'btn primary', 'Se connecter'); go.id = 'ol-login';
+          go.addEventListener('click', () => {
+            olError = '';
+            EL.login(em.value.trim(), pw.value).then(() => build()).catch((e) => {
+              olError = e.kind === 'bad' ? 'E-mail ou mot de passe refusé.' : e.kind === 'reseau' ? 'Pas de réseau.' : 'Erreur : ' + e.message;
+              build();
+            });
+          });
+          f.append(em, pw, go);
+          box.append(f);
+          if (olError) box.append(el('p', 'olerr', olError));
+          return;
         }
 
         const names = el('div', 'field');
-        names.append(el('div', 'lbl', nh > 1 ? 'Prénoms' : 'Prénom'));
-        for (let i = 0; i < nh; i++) {
-          const inp = el('input');
-          inp.type = 'text';
-          inp.maxLength = 14;
-          inp.value = m.names[i];
-          inp.placeholder = 'Joueur ' + (i + 1);
-          inp.autocomplete = 'off';
-          inp.addEventListener('input', () => { m.names[i] = inp.value; });
-          names.append(inp);
-        }
+        names.append(el('div', 'lbl', 'Prénom'));
+        const inp = el('input');
+        inp.type = 'text'; inp.maxLength = 14; inp.value = m.names[0]; inp.placeholder = 'Joueur 1'; inp.autocomplete = 'off'; inp.id = 'ol-name';
+        inp.addEventListener('input', () => { m.names[0] = inp.value; });
+        names.append(inp);
         box.append(names);
 
         box.append(stepper('Robots', m.bots, minB, maxB, (v) => { m.bots = v; build(); }));
@@ -338,29 +350,82 @@
         box.append(fast);
 
         const actions = el('div', 'actions');
-        const play = el('button', 'btn primary', 'Nouvelle partie');
+        const play = el('button', 'btn primary', online ? 'Créer une partie en ligne' : 'Nouvelle partie');
+        play.id = 'btn-new';
         play.addEventListener('click', () => {
           settings = Object.assign({}, settings, m);
           writeJSON(LS_SETTINGS, settings);
-          startGame(null);
+          if (online) onlineCreate(); else startGame(null);
         });
         actions.append(play);
-        if (sv && sv.players) {
+        if (!online && sv && sv.players && sv.mode === 'solo') {
           const resume = el('button', 'btn', 'Reprendre la partie (manche ' + sv.round + ', tour ' + (sv.turn + 1) + ')');
           resume.addEventListener('click', () => startGame(sv));
           actions.append(resume);
         }
+        box.append(actions);
+
+        if (online) {
+          const jf = el('div', 'field');
+          jf.append(el('div', 'lbl', 'Rejoindre une partie'));
+          const row = el('div', 'olrow');
+          const code = el('input'); code.maxLength = 4; code.placeholder = 'Code'; code.autocapitalize = 'characters'; code.autocomplete = 'off'; code.id = 'ol-code';
+          const jb = el('button', 'btn', 'Rejoindre'); jb.id = 'ol-join';
+          jb.addEventListener('click', () => {
+            settings = Object.assign({}, settings, m); writeJSON(LS_SETTINGS, settings);
+            onlineJoin(code.value);
+          });
+          row.append(code, jb);
+          jf.append(row);
+          box.append(jf);
+          const lf = el('div', 'field');
+          lf.append(el('div', 'lbl', 'Parties en cours'));
+          const list = el('div', 'ollist'); list.id = 'ol-list';
+          lf.append(list);
+          box.append(lf);
+          EL.liste('6quiprend').then((a) => {
+            if (!a.length) { list.append(el('div', 'hint', 'Aucune pour l’instant.')); return; }
+            a.forEach((r) => {
+              const it = el('div', 'olitem');
+              const t = el('div', 't'); t.append(el('b', '', r.id), el('small', '', r.titre || ''));
+              const rs = el('button', '', 'Reprendre'); rs.dataset.ol = 'resume';
+              rs.addEventListener('click', () => onlineResume(r.id));
+              const del = el('button', '', '✕'); del.dataset.ol = 'del'; del.setAttribute('aria-label', 'Supprimer la partie ' + r.id);
+              del.addEventListener('click', () => {
+                if (confirm('Supprimer la partie ' + r.id + ' pour les deux joueurs ?')) EL.supprimer(r.id).then(() => build()).catch(() => {});
+              });
+              it.append(t, rs, del);
+              list.append(it);
+            });
+          }).catch((e) => { list.append(el('div', 'olerr', e.kind === 'reseau' ? 'Pas de réseau.' : 'Erreur : ' + e.message)); });
+          const who = el('div', 'hint');
+          who.append('Connecté : ' + EL.email() + ' ');
+          const lo = el('button', 'linkbtn', 'Se déconnecter'); lo.id = 'ol-logout';
+          lo.addEventListener('click', () => { EL.logout(); build(); });
+          who.append(lo);
+          box.append(who);
+          if (olError) box.append(el('p', 'olerr', olError));
+        }
+
+        const more = el('div', 'actions');
         const rules = el('button', 'btn ghost', 'Règles du jeu');
         rules.addEventListener('click', () => showRules());
-        actions.append(rules);
+        more.append(rules);
         if (G) {
+          if (G.mode === 'online') {
+            const quit = el('button', 'btn ghost', 'Quitter la partie en ligne (elle reste ouverte)'); quit.id = 'btn-quit';
+            quit.addEventListener('click', goHome);
+            more.append(quit);
+          }
           const close = el('button', 'btn ghost', 'Fermer');
           close.addEventListener('click', closeModal);
-          actions.append(close);
+          more.append(close);
         }
-        box.append(actions);
+        box.append(more);
+        box.append(el('p', 'ver', 'Version ' + APP_VERSION));
       };
       build();
+      showMenu.setError = (t) => { olError = t; build(); };
     });
   }
 
@@ -386,24 +451,7 @@
     });
   }
 
-  function handover(p) {
-    return new Promise((resolve) => {
-      modal((box) => {
-        box.append(el('div', 'big', '📱'));
-        box.append(el('h2', '', 'Passe l’appareil à ' + p.name));
-        box.append(el('p', 'sub', 'Les autres ne regardent pas !'));
-        const actions = el('div', 'actions');
-        const ok = el('button', 'btn primary', 'C’est moi, ' + p.name);
-        ok.addEventListener('click', () => { closeModal(); resolve(); });
-        actions.append(ok);
-        box.append(actions);
-      });
-    });
-  }
-
-  function summaryModal(over) {
-    return new Promise((resolve) => {
-      modal((box) => {
+  function summaryBody(box, over) {
         const sorted = G.players.slice().sort((a, b) => (over ? a.total - b.total : a.round - b.round));
         box.append(el('h2', '', over ? 'Partie terminée' : 'Fin de la manche ' + G.round));
         let bestVal = Infinity;
@@ -427,6 +475,12 @@
           t.append(tr);
         });
         box.append(t);
+  }
+
+  function summaryModal(over) {
+    return new Promise((resolve) => {
+      modal((box) => {
+        summaryBody(box, over);
         const actions = el('div', 'actions');
         const main = el('button', 'btn primary', over ? 'Rejouer' : 'Manche suivante');
         main.addEventListener('click', () => { closeModal(); resolve(over ? 'again' : 'next'); });
@@ -543,14 +597,7 @@
       return true;
     });
 
-    if (G.mode === 'face') {
-      await A(my, Promise.all(needPick.map((h) => askPick(h, true))));
-    } else {
-      for (const h of needPick) {
-        if (humans.length > 1) await A(my, handover(h));
-        await A(my, askPick(h, false));
-      }
-    }
+    for (const h of needPick) await A(my, askPick(h, false));
 
     clearHands();
     const order = G.players.slice().sort((a, b) => a.picked - b.picked);
@@ -647,6 +694,7 @@
   }
 
   function startGame(saved) {
+    onlineStop();
     runId++;
     const my = runId;
     closeModal();
@@ -659,6 +707,398 @@
     }
     run(my);
   }
+
+
+  /* ---------- En ligne ---------- */
+
+  let ONL = null; // { id, me, version, dirty, pushing, busy, ops[], status, watch, retry, looping }
+  let pickSel = null;
+  let modalKey = '';
+
+  function wireOf(g) { return JSON.parse(JSON.stringify(Object.assign({}, g, { seen: Array.from(g.seen) }))); }
+  function unwire(g) { g.seen = new Set(g.seen); return g; }
+  function titre(g) {
+    g = g || G;
+    return g.players.filter((p) => p.human && p.name !== '…').map((p) => p.name).join(' et ') + ' · ' + (g.online.joined ? 'manche ' + g.round : 'en attente') + (g.phase === 'over' ? ' (terminée)' : '');
+  }
+  function getMap() { return readJSON(LS_ONLINE) || {}; }
+  function setMap(id, me) { const m = getMap(); m[id] = me; writeJSON(LS_ONLINE, m); }
+  function seatFor(id, g) {
+    const m = getMap();
+    let me = m[id];
+    if (me == null && g.online) { const k = g.online.uids.indexOf(EL.uid()); if (k >= 0) me = k; }
+    return me;
+  }
+  function notice(text) { if (showMenu.setError) showMenu.setError(text); }
+
+  function onlineStart(id, me, version) {
+    onlineStop();
+    runId++;
+    ONL = { id, me, version, dirty: false, pushing: false, busy: false, ops: [], status: 'ok', watch: null, retry: null, looping: false };
+    setMap(id, me);
+    ONL.watch = EL.surveiller(id, () => (ONL ? ONL.version : 0), onRemote, onStatus);
+  }
+  function onlineStop() {
+    if (ONL) { if (ONL.watch) ONL.watch.stop(); clearTimeout(ONL.retry); }
+    ONL = null; modalKey = '';
+    const b = $('#offbar'); if (b) b.hidden = true;
+  }
+  function goHome(msg) {
+    onlineStop();
+    G = null; pickSel = null;
+    clearHands(); closeModal(); renderAll(); setStatus('');
+    showMenu();
+    if (msg) notice(msg);
+  }
+  function onStatus(st) {
+    if (!ONL) return;
+    ONL.status = st;
+    $('#offbar').hidden = st !== 'hors-ligne';
+    if (st === 'supprimee') { goHome('Cette partie a été supprimée.'); return; }
+    if (st === 'auth') { goHome('Session expirée : reconnecte-toi.'); return; }
+    if (st === 'ok') { if (ONL.dirty && !ONL.pushing) flush(); if (ONL.ops.length && !ONL.busy) guestFlush(); }
+  }
+
+  /* L'hôte (siège 0) possède l'état : il le publie en entier. L'invité n'envoie que des « actions » (sa carte, son choix de rangée, « manche suivante », son arrivée). */
+  function applyOps(s, ops) {
+    ops.forEach((op) => {
+      if (op.k === 'pick') {
+        const p = s.players[op.pid];
+        if (s.phase === 'pick' && p && p.picked == null && p.hand.indexOf(op.card) >= 0) p.picked = op.card;
+      } else if (op.k === 'answer') {
+        if (s.phase === 'ask' && s.ask && s.ask.pid === op.pid && s.answer == null) s.answer = op.row;
+      } else if (op.k === 'next') {
+        if ((s.phase === 'roundend' || s.phase === 'over') && !s.next) s.next = op.act;
+      } else if (op.k === 'join') {
+        if (!s.online.joined) { s.players[1].name = op.name; s.online.uids[1] = op.uid; s.online.joined = true; }
+      }
+    });
+  }
+
+  function publish() {     // hôte : affiche tout de suite, puis envoie
+    if (!ONL) return;
+    onlineRender();
+    ONL.dirty = true;
+    flush();
+  }
+  function flush() {
+    const o = ONL;
+    if (!o || o.pushing || !o.dirty) return;
+    o.pushing = true; o.dirty = false;
+    EL.ecrire(o.id, o.version, wireOf(G), titre()).then((nv) => {
+      if (ONL !== o) return;
+      o.pushing = false;
+      if (nv) { o.version = nv; if (o.status === 'hors-ligne') onStatus('ok'); if (o.dirty) flush(); return; }
+      return EL.lire(o.id).then((row) => {      // un invité a écrit avant nous : on garde ses champs et on renvoie
+        if (ONL !== o || !row) return;
+        o.version = row.version;
+        absorb(unwire(row.etat));
+        o.dirty = true; flush();
+      });
+    }).catch((e) => {
+      if (ONL !== o) return;
+      o.pushing = false; o.dirty = true;
+      onStatus(e && e.kind === 'reseau' ? 'hors-ligne' : 'erreur');
+      if (e && e.kind === 'auth') return;
+      clearTimeout(o.retry);
+      o.retry = setTimeout(() => { if (ONL === o) flush(); }, 2000);
+    });
+  }
+  function absorb(r) {     // hôte : reprend ce que l'invité a écrit
+    if (G.phase === 'pick' && r.phase === 'pick') {
+      G.players.forEach((p, i) => { if (p.human && i !== 0 && p.picked == null && r.players[i].picked != null) p.picked = r.players[i].picked; });
+    }
+    if (G.phase === 'ask' && r.phase === 'ask' && r.answer != null && G.answer == null) G.answer = r.answer;
+    if ((G.phase === 'roundend' || G.phase === 'over') && r.next && !G.next) G.next = r.next;
+    if (!G.online.joined && r.online.joined) { G.online = r.online; G.players[1].name = r.players[1].name; }
+  }
+
+  function guestOp(op) {
+    ONL.ops.push(op);
+    applyOps(G, [op]);          // effet immédiat à l'écran
+    onlineRender();
+    guestFlush();
+  }
+  function guestFlush() {
+    const o = ONL;
+    if (!o || o.busy || !o.ops.length) return;
+    o.busy = true;
+    EL.lire(o.id).then((row) => {
+      if (ONL !== o) return;
+      if (!row) throw { kind: 'gone' };
+      const s = unwire(row.etat), ops = o.ops.slice();
+      applyOps(s, ops);
+      return EL.ecrire(o.id, row.version, wireOf(s), titre(s)).then((nv) => {
+        if (ONL !== o) return;
+        o.busy = false;
+        if (!nv) { guestFlush(); return; }        // conflit : on relit et on recommence
+        o.ops = o.ops.filter((x) => ops.indexOf(x) < 0);
+        o.version = nv; G = s;
+        if (o.status === 'hors-ligne') onStatus('ok');
+        if (G.online.uids.indexOf(EL.uid()) < 0) { goHome('Cette partie a déjà ses deux joueurs.'); return; }
+        onlineShow();
+        if (o.ops.length) guestFlush();
+      });
+    }).catch((e) => {
+      if (ONL !== o) return;
+      o.busy = false;
+      if (e && e.kind === 'gone') { goHome('Cette partie a été supprimée.'); return; }
+      onStatus(e && e.kind === 'reseau' ? 'hors-ligne' : 'erreur');
+      if (e && e.kind === 'auth') return;
+      clearTimeout(o.retry);
+      o.retry = setTimeout(() => { if (ONL === o) guestFlush(); }, 2000);
+    });
+  }
+
+  function onRemote() {
+    const o = ONL;
+    if (!o || o.pushing || o.dirty || o.busy || o.ops.length) return;
+    return EL.lire(o.id).then((row) => {
+      if (ONL !== o || !row || row.version <= o.version || o.pushing || o.dirty || o.busy || o.ops.length) return;
+      o.version = row.version;
+      const r = unwire(row.etat);
+      if (o.me === 0) { absorb(r); onlineShow(); }
+      else { G = r; onlineShow(); }
+    });
+  }
+
+  function newOnlineState(g) {
+    g.players.forEach((p) => { p.total = 0; p.round = 0; p.picked = null; });
+    g.round = 1;
+  }
+
+  function onlineCreate() {
+    runId++;
+    const nm = (settings.names[0] || '').trim() || 'Joueur 1';
+    const players = [
+      { id: 0, name: nm, human: true, seat: 'bottom', hand: [], total: 0, round: 0, picked: null },
+      { id: 1, name: '…', human: true, seat: 'bottom', hand: [], total: 0, round: 0, picked: null },
+    ];
+    const nb = Math.max(0, Math.min(settings.bots, 8));
+    for (let i = 0; i < nb; i++) players.push({ id: 2 + i, name: BOT_NAMES[i], human: false, seat: 'bottom', hand: [], total: 0, round: 0, picked: null });
+    G = { mode: 'online', target: settings.target, round: 1, turn: 0, players, rows: [], seen: new Set(),
+      phase: 'pick', cue: null, ask: null, answer: null, next: null, online: { uids: [EL.uid(), null], joined: false } };
+    deal();
+    const g = G;
+    EL.creer('6quiprend', wireOf(g), nm + ' · en attente').then((r) => {
+      if (G !== g) return;
+      onlineStart(r.id, 0, r.version);
+      onlineShow();
+    }).catch((e) => { G = null; showMenu(); notice(e.kind === 'reseau' ? 'Pas de réseau.' : e.kind === 'auth' ? 'Session expirée : reconnecte-toi.' : 'Erreur : ' + e.message); });
+  }
+  function onlineJoin(code) {
+    code = (code || '').trim().toUpperCase();
+    if (code.length !== 4) { notice('Le code a 4 lettres.'); return; }
+    EL.lire(code).then((row) => {
+      if (!row || row.jeu !== '6quiprend') { notice('Code inconnu.'); return; }
+      const g = unwire(row.etat), me = seatFor(code, g);
+      if (me != null && (g.online.joined || me === 0)) { G = g; onlineStart(code, me, row.version); closeModal(); onlineShow(); return; }
+      if (g.online.joined) { notice('Cette partie a déjà ses deux joueurs.'); return; }
+      let nm = (settings.names[0] || '').trim() || 'Joueur 2';
+      if (nm === g.players[0].name) nm += ' (2)';
+      G = g; onlineStart(code, 1, row.version);
+      guestOp({ k: 'join', name: nm, uid: EL.uid() });
+      closeModal();
+    }).catch((e) => notice(e.kind === 'reseau' ? 'Pas de réseau.' : e.kind === 'auth' ? 'Session expirée : reconnecte-toi.' : 'Erreur : ' + e.message));
+  }
+  function onlineResume(id) {
+    EL.lire(id).then((row) => {
+      if (!row) { notice('Partie introuvable.'); return; }
+      const g = unwire(row.etat), me = seatFor(id, g);
+      G = g; onlineStart(row.id, me != null ? me : 0, row.version); closeModal(); onlineShow();
+    }).catch((e) => notice('Erreur : ' + (e.message || 'inconnue')));
+  }
+
+  function onlineShow() {
+    if (!G.online.joined) {
+      const key = 'wait';
+      if (modalKey !== key) {
+        modalKey = key;
+        modal((box) => {
+          box.append(el('div', 'big', '⏳'));
+          const h = el('h2', '', 'Partie '); const c = el('span', '', ONL.id); c.id = 'wait-code'; h.append(c);
+          box.append(h);
+          box.append(el('p', 'sub', 'Demande à l’autre joueur de choisir « En ligne », puis « Rejoindre », et de taper ce code.'));
+          box.append(el('p', 'sub', 'En attente de l’autre joueur…'));
+          const actions = el('div', 'actions');
+          const home = el('button', 'btn ghost', 'Revenir au menu (la partie reste ouverte)'); home.id = 'wait-home';
+          home.addEventListener('click', () => goHome());
+          const cancel = el('button', 'btn ghost', 'Annuler la partie'); cancel.id = 'wait-cancel';
+          cancel.addEventListener('click', () => { const id = ONL && ONL.id; goHome(); if (id && confirm('Supprimer la partie ' + id + ' ?')) EL.supprimer(id).catch(() => {}); });
+          actions.append(cancel, home);
+          box.append(actions);
+        });
+      }
+      renderAll();
+      return;
+    }
+    if (modalKey === 'wait') { closeModal(); modalKey = ''; }
+    onlineRender();
+    if (ONL.me === 0 && !ONL.looping) { ONL.looping = true; hostRun(ONL); }
+  }
+
+  function commitPick(card) {
+    pickSel = null;
+    if (ONL.me === 0) { G.players[0].picked = card; publish(); }
+    else guestOp({ k: 'pick', pid: ONL.me, card });
+  }
+  function answerRow(i) {
+    if (ONL.me === 0) { G.answer = i; publish(); }
+    else guestOp({ k: 'answer', pid: ONL.me, row: i });
+  }
+  function nextAct(act) {
+    if (act === 'menu') { goHome(); return; }
+    if (ONL.me === 0) { G.next = act; publish(); }
+    else guestOp({ k: 'next', act });
+  }
+
+  function onlineRender() {
+    if (!G || !ONL) return;
+    const me = ONL.me, mine = G.players[me], cue = G.cue || {};
+    const asking = G.phase === 'ask' && G.ask && G.ask.pid === me;
+    renderScores();
+    renderBoard({ hl: cue.hl, warn: cue.warn, select: asking ? answerRow : null });
+    renderPlayed(cue.order ? cue.order.map((id) => G.players[id]) : null, cue.active != null ? cue.active : -1);
+    clearHands();
+    const zone = $('#zone-bottom');
+    let status = cue.status || '';
+    if (G.phase === 'pick') {
+      status = 'Manche ' + G.round + ' · tour ' + (G.turn + 1) + '/10';
+      if (mine.picked == null && mine.hand.length > 1) {
+        status += ' · choisis une carte';
+        zone.append(el('div', 'zlabel', mine.name + ' · choisis une carte'));
+        const hand = el('div', 'hand');
+        mine.hand.forEach((n) => {
+          const c = cardEl(n, { sel: n === pickSel });
+          c.addEventListener('click', () => { if (pickSel === n) commitPick(n); else { pickSel = n; onlineRender(); } });
+          hand.append(c);
+        });
+        zone.append(hand);
+        const bar = el('div', 'zbar');
+        const ok = el('button', 'btn primary', pickSel != null ? 'Jouer le ' + pickSel : 'Touche une carte');
+        ok.id = 'pick-ok'; ok.disabled = pickSel == null;
+        ok.addEventListener('click', () => { if (pickSel != null) commitPick(pickSel); });
+        bar.append(ok);
+        zone.append(bar);
+      } else {
+        const waiting = G.players.filter((p) => p.human && p.picked == null && p.id !== me).map((p) => p.name);
+        status += mine.picked != null ? ' · ta carte est choisie' + (waiting.length ? ', on attend ' + waiting.join(' & ') : '') : '';
+        if (mine.hand.length === 1) status += ' · dernière carte jouée automatiquement';
+        zone.append(el('div', 'zlabel ready', mine.name + ' · prêt ✓'));
+      }
+    } else {
+      if (mine.hand.length) {
+        zone.append(el('div', 'zlabel', 'Ta main'));
+        const hand = el('div', 'hand');
+        mine.hand.forEach((n) => hand.append(cardEl(n, { dim: true })));
+        zone.append(hand);
+      }
+      if (asking) status = mine.name + ' : touche la rangée à ramasser (le ' + G.ask.card + ' est trop petit)';
+    }
+    setStatus(status, !!cue.alert || asking);
+    // fenêtre de fin de manche
+    if (G.phase === 'roundend' || G.phase === 'over') {
+      const key = G.phase + G.round;
+      if (modalKey !== key) {
+        modalKey = key;
+        const over = G.phase === 'over';
+        modal((box) => {
+          summaryBody(box, over);
+          const actions = el('div', 'actions');
+          const main = el('button', 'btn primary', over ? 'Rejouer' : 'Manche suivante'); main.id = 'sum-next';
+          main.addEventListener('click', () => { main.disabled = true; nextAct(over ? 'again' : 'next'); });
+          const menu = el('button', 'btn ghost', 'Quitter vers le menu'); menu.id = 'sum-menu';
+          menu.addEventListener('click', () => nextAct('menu'));
+          actions.append(main, menu);
+          box.append(actions);
+        });
+      }
+    } else if (modalKey && modalKey !== 'wait') { closeModal(); modalKey = ''; }
+  }
+
+  async function hostRun(o) {
+    const alive = () => ONL === o;
+    const wait = async (cond) => { while (alive() && !cond()) await new Promise((r) => setTimeout(r, 60)); if (!alive()) throw ABORT; };
+    const nap = async (ms) => { await sleep(ms); if (!alive()) throw ABORT; };
+    const hands = () => G.players.every((p) => p.picked != null);
+    try {
+      for (;;) {
+        while (G.turn < 10) {
+          if (G.phase === 'pick') {
+            G.players.forEach((p) => {
+              if (p.picked != null) return;
+              if (!p.human) p.picked = E.botPick(p.hand, G.rows, { others: G.players.length - 1, seen: G.seen });
+              else if (p.hand.length === 1) p.picked = p.hand[0];
+            });
+            G.cue = null;
+            publish();
+            await wait(hands);
+            const order = G.players.slice().sort((a, b) => a.picked - b.picked);
+            G.phase = 'reveal';
+            G.cue = { status: 'Les cartes sont révélées !', order: order.map((p) => p.id), done: 0, active: -1 };
+            publish();
+            await nap(1000);
+          }
+          const ids = G.cue.order, order = ids.map((id) => G.players[id]);
+          for (let i = G.cue.done; i < order.length; i++) {
+            const p = order[i], card = p.picked;
+            const base = { order: ids, done: i, active: i };
+            const r = E.targetRow(G.rows, card);
+            let chosen = null, takeIdx = -1;
+            if (r === -1) {
+              if (p.human) {
+                G.phase = 'ask'; G.ask = { pid: p.id, card }; G.answer = null;
+                G.cue = Object.assign({}, base, { status: p.name + ' : le ' + card + ' est plus petit que toutes les rangées', alert: true });
+                publish();
+                await wait(() => G.answer != null);
+                chosen = G.answer; G.answer = null; G.ask = null; G.phase = 'reveal';
+              } else {
+                chosen = E.botRow(G.rows);
+                G.cue = Object.assign({}, base, { status: p.name + ' : le ' + card + ' est trop petit, il prend la rangée ' + (chosen + 1) });
+                publish();
+                await nap(800);
+              }
+              takeIdx = chosen;
+            } else if (G.rows[r].length >= E.ROW_MAX) {
+              takeIdx = r;
+            }
+            let status = '';
+            if (takeIdx >= 0) {
+              const row = G.rows[takeIdx];
+              status = p.name + ' ramasse ' + row.length + ' cartes : +' + E.rowHeads(row) + ' 🐮';
+              G.cue = Object.assign({}, base, { status, alert: true, warn: takeIdx });
+              publish();
+              await nap(1100);
+            }
+            const res = E.place(G.rows, card, chosen);
+            G.seen.add(card);
+            p.round += res.penalty;
+            G.cue = { order: ids, done: i + 1, active: i, hl: { row: res.row, card }, status: takeIdx < 0 ? p.name + ' pose le ' + card : status, alert: takeIdx >= 0 };
+            publish();
+            await nap(res.penalty ? 800 : 700);
+          }
+          G.players.forEach((p) => { p.hand.splice(p.hand.indexOf(p.picked), 1); p.picked = null; });
+          G.turn++; G.phase = 'pick'; G.cue = null;
+          publish();
+        }
+        G.players.forEach((p) => { p.total += p.round; });
+        const over = G.target === 0 || G.players.some((p) => p.total >= G.target);
+        G.phase = over ? 'over' : 'roundend'; G.next = null;
+        publish();
+        await wait(() => G.next);
+        const act = G.next; G.next = null;
+        if (act === 'again') newOnlineState(G); else G.round++;
+        deal();
+        G.phase = 'pick'; G.cue = null;
+        publish();
+      }
+    } catch (e) {
+      if (e !== ABORT) console.error(e);
+    }
+  }
+
+  window.addEventListener('offline', () => { if (ONL) onStatus('hors-ligne'); });
+  window.addEventListener('online', () => { if (ONL && ONL.watch) ONL.watch.poke(); });
 
   /* ---------- Démarrage ---------- */
 

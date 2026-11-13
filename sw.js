@@ -1,10 +1,11 @@
 /* Service worker : cache local pour jouer hors ligne. Incrémente CACHE à chaque mise à jour des fichiers. */
-const CACHE = '6quiprend-v1';
+const CACHE = '6quiprend-v2';
 const ASSETS = [
   './',
   'index.html',
   'style.css',
   'engine.js',
+  'en-ligne.js',
   'game.js',
   'manifest.webmanifest',
   'icons/icon.svg',

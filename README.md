@@ -5,8 +5,9 @@ Le jeu de cartes **6 qui prend**, jouable en local dans le navigateur, installab
 ## Modes
 
 - **Contre l'ordi** : toi contre 1 à 9 robots.
-- **Passe-passe** : 2 à 4 humains sur le même appareil (+ robots éventuels). Un écran « Passe l'appareil à… » protège chaque main.
-- **Face à face** : 2 humains de chaque côté de l'iPad (la main du joueur du haut est retournée). Les mains restent cachées jusqu'à « Voir ma main ».
+- **En ligne** : 2 humains, chacun sur son appareil (iPhone, iPad, téléphone Android…), plus 0 à 8 robots pour compléter la table. Il faut un compte (le même que pour les autres applications) ; on crée une partie, on reçoit un code à 4 lettres, l'autre joueur le tape. Chacun ne voit que sa main (masquée à l'écran, pas chiffrée : le jeu repose sur la confiance entre les deux joueurs).
+
+Les anciens modes « passe-passe » et « face à face » ont été remplacés par l'en ligne.
 
 De 2 à 10 joueurs au total. Fin de partie : *partie à 66* (on enchaîne les manches) ou *une seule manche*.
 La partie en cours est sauvegardée à chaque tour (bouton « Reprendre » dans le menu ☰).
@@ -17,6 +18,7 @@ La partie en cours est sauvegardée à chaque tour (bouton « Reprendre » dans 
 | --- | --- |
 | `index.html`, `style.css` | Interface |
 | `engine.js` | Règles et robots (sans dépendance au DOM) |
+| `en-ligne.js` | Brique commune « En ligne » (connexion, parties, synchro) |
 | `game.js` | Déroulement de la partie et écrans |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA / hors ligne |
 
@@ -44,3 +46,13 @@ Sur iPad / iPhone : ouvre l'adresse dans Safari → **Partager → Sur l'écran 
 ## Licence
 
 Tous droits réservés © Maximeavril1869. Code publié pour consultation uniquement ; toute réutilisation exige l'autorisation écrite de l'auteur. Voir le fichier `LICENSE`.
+
+## Tests
+
+```
+python3 -m http.server 8123          # depuis la racine du dépôt
+python3 tests/e2e/solo.py            # essai de fumée : contre l'ordi
+python3 tests/e2e/en_ligne.py        # deux appareils simulés + faux Supabase (36 vérifications)
+```
+
+Voir `ARCHITECTURE.md` et `CARNET_DE_BORD.md`.

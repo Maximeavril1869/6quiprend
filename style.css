@@ -264,3 +264,16 @@ table.sum tr.win td { color: var(--gold); font-weight: 700; }
 @media (prefers-reduced-motion: reduce) {
   .card.pop, .row.warn, .row.selectable { animation: none; }
 }
+
+/* ---------- En ligne ---------- */
+#offbar{position:fixed;left:0;right:0;bottom:env(safe-area-inset-bottom);z-index:60;height:26px;line-height:25px;padding:0 10px;text-align:center;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;background:#fef3c7;color:#92400e;border-top:1px solid #fcd34d}
+#offbar[hidden]{display:none}
+.olerr{margin:8px 0 0;color:var(--danger);font-size:14px;line-height:1.35}
+.olrow{display:flex;gap:8px}
+.olrow input{text-transform:uppercase;letter-spacing:.2em;text-align:center}
+.olitem{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.12);font-size:14px}
+.olitem .t{flex:1;min-width:0;text-align:left}.olitem .t b{letter-spacing:.15em}.olitem .t small{display:block;opacity:.7}
+.olitem button{padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:transparent;color:inherit;font-size:14px}
+.linkbtn{background:none;border:0;color:var(--gold);text-decoration:underline;font-size:inherit;padding:0 4px}
+.ver{margin:6px 0 0;font-size:12px;opacity:.6;text-align:center}
+#wait-code{letter-spacing:.2em;color:var(--gold)}
