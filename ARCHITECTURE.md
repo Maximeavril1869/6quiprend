@@ -10,7 +10,7 @@ engine.js               Règles pures : paquet, têtes de bœuf, choix de rangé
 en-ligne.js             Brique commune « En ligne » (copie de celle de Skyjo) : connexion, parties, synchro (window.EnLigne)
 game.js                 Déroulement de la partie, écrans, mode solo et mode en ligne
 sw.js, manifest.webmanifest, icons/   PWA / hors ligne (cache `6quiprend-vN`, à incrémenter avec APP_VERSION de game.js)
-tests/e2e/en_ligne.py   Deux appareils simulés (Chromium) + faux Supabase en mémoire
+tests/e2e/en_ligne.py   Deux appareils + plateau simulés (Chromium) + faux Supabase en mémoire (60 vérifications)
 tests/e2e/solo.py       Essai de fumée : une manche contre l'ordinateur
 ```
 
@@ -42,6 +42,14 @@ Champs de partie en ligne : `G.mode = 'online'`, `G.phase` (`pick` | `reveal` | 
 **Hors ligne** : la bannière `#offbar` (`pointer-events:none`) apparaît ; la carte choisie par l'invité reste affichée et part au retour du réseau (réessai toutes les 2 s). Si l'hôte est hors ligne, la partie s'arrête pour tous jusqu'à son retour.
 
 **Mains cachées** : toutes les mains sont dans la ligne ; l'interface n'affiche que la sienne. Choix assumé (confiance).
+
+## Plateau (iPad en affichage seul)
+
+Menu → En ligne → « Ouvrir comme plateau » (`plateauStart`). Le plateau ne prend aucun siège et **n'écrit jamais dans la ligne de la partie** (l'hôte publie l'état en entier : une écriture étrangère créerait des conflits). Il la lit seulement (`surveiller` → `plRemote` → `plRender`) et réutilise les mêmes fonctions d'affichage que les joueurs (`renderScores`, `renderBoard`, `renderPlayed`, `summaryBody` sans boutons) ; `body.plateau` agrandit les cartes. Le plateau n'affiche jamais les cartes choisies avant leur révélation (seulement « prêt » par joueur).
+
+**Signe de vie** : le plateau écrit dans une ligne séparée de la table `parties` (`jeu = 'plateau'`, `titre` = code de la partie) au lancement, 1,5 s après, puis toutes les 10 s (`plBeat`) ; il réutilise la ligne existante de même titre et la supprime en quittant. **Côté téléphone** (`platWatch`) : toutes les 5 s, `EL.liste('plateau')` ; si la version de cette ligne a changé depuis moins de 30 s, `ONL.plat.present` passe à vrai : `#app.notable` cache le plateau de rangées et les cartes jouées, et la rangée à ramasser se choisit par 4 boutons (`rowButtons`). Le premier passage note seulement la version (un reste d'une séance précédente ne cache donc pas la table) ; aucune comparaison d'horloges entre appareils. `ONL.plat.override` (bouton « Afficher la table ») force la table ; il retombe quand le plateau disparaît. Réglages de test : `window.PLATEAU_POLL`, `PLATEAU_BEAT`, `PLATEAU_FRESH`.
+
+Hypothèse à vérifier sur le vrai Supabase : la table `parties` accepte `jeu = 'plateau'`. Sinon les téléphones gardent simplement la table, sans erreur.
 
 ## Sauvegardes (localStorage)
 

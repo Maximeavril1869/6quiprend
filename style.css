@@ -277,3 +277,21 @@ table.sum tr.win td { color: var(--gold); font-weight: 700; }
 .linkbtn{background:none;border:0;color:var(--gold);text-decoration:underline;font-size:inherit;padding:0 4px}
 .ver{margin:6px 0 0;font-size:12px;opacity:.6;text-align:center}
 #wait-code{letter-spacing:.2em;color:var(--gold)}
+
+/* ---------- Plateau (affichage commun sur iPad) ---------- */
+body.plateau { --cw0: min(calc((100vw - 90px) / 5.7), calc((100vh - 210px) / 8.2), 150px); }
+@supports (height: 100dvh) {
+  body.plateau { --cw0: min(calc((100vw - 90px) / 5.7), calc((100dvh - 210px) / 8.2), 150px); }
+}
+body.plateau #status { font-size: 18px; min-height: 40px; }
+body.plateau .chip .nm { font-size: 15px; max-width: 140px; }
+body.plateau .chip .pts { font-size: 14px; }
+body.plateau #round-info { font-size: 15px; }
+body.plateau .pl { font-size: 14px; }
+body.plateau .rb { font-size: 14px; top: -11px; }
+body.plateau .rb .bull { width: 14px; height: 14px; }
+.btn.small { min-height: 34px; font-size: 13px; padding: 0 12px; }
+/* téléphone avec un plateau branché : plus de table commune, seulement la main et les boutons */
+#app.notable #board, #app.notable #played { display: none; }
+.rowbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; max-width: 420px; }
+.rowbtn { min-height: 60px; border-color: var(--gold); }

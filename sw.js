@@ -1,5 +1,5 @@
 /* Service worker : cache local pour jouer hors ligne. Incrémente CACHE à chaque mise à jour des fichiers. */
-const CACHE = '6quiprend-v3';
+const CACHE = '6quiprend-v4';
 const ASSETS = [
   './',
   'index.html',

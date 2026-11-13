@@ -1,4 +1,5 @@
-/* 6 qui prend — interface et déroulement de la partie. */
+/* 6 qui prend — interface et déroulement de la partie.
+   Un « plateau » (iPad en affichage seul) peut se brancher sur une partie en ligne : les téléphones cachent alors la table commune. */
 (function () {
   'use strict';
 
@@ -7,7 +8,7 @@
   const LS_SETTINGS = '6qp.settings.v1';
   const LS_SAVE = '6qp.save.v1';
   const LS_ONLINE = '6qp.online.v1';
-  const APP_VERSION = '3';
+  const APP_VERSION = '4';
   const EL = window.EnLigne;
   const BOT_NAMES = ['Bouba', 'Mina', 'Zoé', 'Léo', 'Maxou', 'Inès', 'Tom', 'Éva', 'Sam'];
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -377,6 +378,9 @@
           });
           row.append(code, jb);
           jf.append(row);
+          const pb = el('button', 'linkbtn', 'Ouvrir comme plateau (affichage seul, sans jouer)'); pb.id = 'ol-plateau';
+          pb.addEventListener('click', () => plateauStart(code.value));
+          jf.append(pb);
           box.append(jf);
           const lf = el('div', 'field');
           lf.append(el('div', 'lbl', 'Parties en cours'));
@@ -711,7 +715,8 @@
 
   /* ---------- En ligne ---------- */
 
-  let ONL = null; // { id, me, version, dirty, pushing, busy, ops[], status, watch, retry, looping }
+  let ONL = null; // { id, me, version, dirty, pushing, busy, ops[], status, watch, retry, looping, plat }
+  let PL = null;  // plateau (affichage seul) : { id, version, watch, rowId, rowVer, timer, t2, busy }
   let pickSel = null;
   let modalKey = '';
 
@@ -737,13 +742,16 @@
     ONL = { id, me, version, dirty: false, pushing: false, busy: false, ops: [], status: 'ok', watch: null, retry: null, looping: false };
     setMap(id, me);
     ONL.watch = EL.surveiller(id, () => (ONL ? ONL.version : 0), onRemote, onStatus);
+    platWatch(ONL);
   }
   function onlineStop() {
-    if (ONL) { if (ONL.watch) ONL.watch.stop(); clearTimeout(ONL.retry); }
+    if (ONL) { if (ONL.watch) ONL.watch.stop(); clearTimeout(ONL.retry); if (ONL.plat) { ONL.plat.stopped = true; clearTimeout(ONL.plat.timer); } }
     ONL = null; modalKey = '';
     const b = $('#offbar'); if (b) b.hidden = true;
+    const a = $('#app'); if (a) a.classList.remove('notable');
   }
   function goHome(msg) {
+    plStop();
     onlineStop();
     G = null; pickSel = null;
     clearHands(); closeModal(); renderAll(); setStatus('');
@@ -952,10 +960,23 @@
     else guestOp({ k: 'next', act });
   }
 
+  function rowButtons() {
+    const box = el('div', 'rowbtns');
+    G.rows.forEach((row, i) => {
+      const b = el('button', 'btn rowbtn', 'Rangée ' + (i + 1) + ' · ' + row.length + (row.length > 1 ? ' cartes' : ' carte') + ' · ' + E.rowHeads(row) + ' 🐮');
+      b.dataset.row = i;
+      b.addEventListener('click', () => answerRow(i));
+      box.append(b);
+    });
+    return box;
+  }
+
   function onlineRender() {
     if (!G || !ONL) return;
     const me = ONL.me, mine = G.players[me], cue = G.cue || {};
     const asking = G.phase === 'ask' && G.ask && G.ask.pid === me;
+    const nt = noTable(), plOn = platOn();
+    $('#app').classList.toggle('notable', nt);
     renderScores();
     renderBoard({ hl: cue.hl, warn: cue.warn, select: asking ? answerRow : null });
     renderPlayed(cue.order ? cue.order.map((id) => G.players[id]) : null, cue.active != null ? cue.active : -1);
@@ -994,6 +1015,12 @@
         zone.append(hand);
       }
       if (asking) status = mine.name + ' : touche la rangée à ramasser (le ' + G.ask.card + ' est trop petit)';
+      if (asking && nt) zone.append(rowButtons());     // table cachée : on choisit la rangée avec des boutons
+    }
+    if (plOn) {
+      const tb = el('button', 'btn ghost small', nt ? 'Afficher la table' : 'Masquer la table'); tb.id = 'btn-table';
+      tb.addEventListener('click', () => { if (ONL && ONL.plat) { ONL.plat.override = !ONL.plat.override; onlineRender(); } });
+      zone.append(tb);
     }
     setStatus(status, !!cue.alert || asking);
     // fenêtre de fin de manche
@@ -1014,6 +1041,141 @@
         });
       }
     } else if (modalKey && modalKey !== 'wait') { closeModal(); modalKey = ''; }
+  }
+
+  /* ---------- Plateau : détection côté téléphone ---------- */
+  // Le plateau écrit régulièrement dans sa propre ligne (jeu « plateau », titre = code de la partie) : la ligne de la partie n'est
+  // jamais touchée. Le téléphone cache la table tant que cette ligne change (< 30 s) et la réaffiche seul si le plateau disparaît.
+  // Au 1er passage on note seulement la version : un reste d'une séance précédente ne compte pas. Pas de comparaison d'horloges.
+  const platPoll = () => (window.PLATEAU_POLL != null ? window.PLATEAU_POLL : 5000);
+  const platFresh = () => (window.PLATEAU_FRESH != null ? window.PLATEAU_FRESH : 30000);
+  const platBeatMs = () => (window.PLATEAU_BEAT != null ? window.PLATEAU_BEAT : 10000);
+  function platOn() { return !!(ONL && ONL.plat && ONL.plat.present); }
+  function noTable() { return platOn() && !ONL.plat.override; }
+  function platWatch(o) {
+    const P = o.plat = { present: false, override: false, ver: null, seen: 0, timer: null, stopped: false };
+    const next = () => { if (ONL === o && !P.stopped) P.timer = setTimeout(tick, platPoll()); };
+    function tick() {
+      if (ONL !== o || P.stopped) return;
+      clearTimeout(P.timer);
+      if (document.hidden || !G || !G.online || !G.online.joined) { next(); return; }
+      EL.liste('plateau').then((rows) => {
+        if (ONL !== o || P.stopped) return;
+        const r = rows.find((x) => x.titre === o.id) || null, now = Date.now();
+        if (!r) { P.ver = null; P.seen = 0; }
+        else if (P.ver == null) P.ver = r.version;
+        else if (r.version !== P.ver) { P.ver = r.version; P.seen = now; }
+        const pres = !!r && P.seen > 0 && now - P.seen < platFresh();
+        if (pres !== P.present) { P.present = pres; if (!pres) P.override = false; if (G) onlineRender(); }
+      }).catch(() => { /* réseau : on garde l'état connu */ }).then(next);
+    }
+    tick();
+  }
+
+  /* ---------- Plateau : affichage seul (iPad commun) ---------- */
+  const OFF_TXT = $('#offbar') ? $('#offbar').textContent : '';
+  function plStop() {
+    const o = PL; if (!o) return;
+    if (o.watch) o.watch.stop();
+    clearInterval(o.timer); clearTimeout(o.t2);
+    if (o.rowId) EL.supprimer(o.rowId).catch(() => { /* la ligne vieillira toute seule */ });
+    PL = null;
+    document.body.classList.remove('plateau');
+    const b = $('#offbar'); if (b) { b.hidden = true; b.textContent = OFF_TXT; }
+  }
+  function plBeat() {
+    const o = PL; if (!o || o.busy) return;
+    o.busy = true;
+    const data = { code: o.id, t: Date.now() };
+    let p;
+    if (o.rowId) {
+      p = EL.ecrire(o.rowId, o.rowVer, data, o.id).then((nv) => {
+        if (nv) { o.rowVer = nv; return null; }
+        return EL.lire(o.rowId).then((row) => { if (row) o.rowVer = row.version; else o.rowId = null; });
+      });
+    } else {
+      p = EL.liste('plateau').then((rows) => {
+        const r = rows.find((x) => x.titre === o.id);
+        if (r) { o.rowId = r.id; o.rowVer = r.version; return null; }
+        return EL.creer('plateau', data, o.id).then((x) => { o.rowId = x.id; o.rowVer = x.version; });
+      });
+    }
+    p.catch(() => { /* hors ligne : le prochain battement réessaiera */ }).then(() => {
+      o.busy = false;
+      if (PL !== o && o.rowId) EL.supprimer(o.rowId).catch(() => {});
+    });
+  }
+  function plRender() {
+    if (!G || !PL) return;
+    const cue = G.cue || {};
+    clearHands();
+    renderScores();
+    if (!G.online.joined) {
+      $('#board').innerHTML = ''; renderPlayed(null);
+      setStatus('Plateau ' + PL.id + ' · en attente des joueurs…');
+      return;
+    }
+    renderBoard({ hl: cue.hl, warn: cue.warn });
+    renderPlayed(cue.order ? cue.order.map((id) => G.players[id]) : null, cue.active != null ? cue.active : -1);
+    let status = cue.status || '', alert = !!cue.alert;
+    if (G.phase === 'pick') {
+      const waiting = G.players.filter((p) => p.picked == null).map((p) => p.name);
+      status = 'Manche ' + G.round + ' · tour ' + (G.turn + 1) + '/10 · ' + (waiting.length ? 'on attend ' + waiting.join(' & ') : 'tout le monde est prêt');
+      alert = false;
+    } else if (G.phase === 'ask' && G.ask) {
+      status = G.players[G.ask.pid].name + ' : le ' + G.ask.card + ' est plus petit que toutes les rangées, il choisit celle à ramasser';
+      alert = true;
+    }
+    setStatus(status, alert);
+    if (G.phase === 'roundend' || G.phase === 'over') {
+      const key = 'pl-' + G.phase + G.round;
+      if (modalKey !== key) { modalKey = key; modal((box) => summaryBody(box, G.phase === 'over')); }
+    } else if (modalKey && modalKey !== 'plmenu') { closeModal(); modalKey = ''; }
+  }
+  function plRemote() {
+    const o = PL; if (!o) return;
+    return EL.lire(o.id).then((row) => {
+      if (PL !== o || !row || row.version <= o.version) return;
+      G = unwire(row.etat); o.version = row.version; plRender();
+    });
+  }
+  function plStatus(st) {
+    if (!PL) return;
+    if (st === 'supprimee') { goHome('Cette partie a été supprimée.'); return; }
+    if (st === 'auth') { goHome('Session expirée : reconnecte-toi.'); return; }
+    const b = $('#offbar');
+    b.textContent = 'Hors ligne : le plateau se remettra à jour au retour du réseau';
+    b.hidden = st !== 'hors-ligne';
+  }
+  function plateauStart(code) {
+    code = (code || '').trim().toUpperCase();
+    if (code.length !== 4) { notice('Le code a 4 lettres.'); return; }
+    EL.lire(code).then((row) => {
+      if (!row || row.jeu !== '6quiprend') { notice('Code inconnu.'); return; }
+      onlineStop(); plStop(); runId++;
+      G = unwire(row.etat); pickSel = null;
+      const o = PL = { id: code, version: row.version, watch: null, rowId: null, rowVer: 0, timer: null, t2: null, busy: false };
+      document.body.classList.add('plateau');
+      closeModal(); modalKey = '';
+      plRender();
+      o.watch = EL.surveiller(code, () => (PL ? PL.version : 0), plRemote, plStatus);
+      plBeat();
+      o.t2 = setTimeout(plBeat, 1500);
+      o.timer = setInterval(plBeat, platBeatMs());
+    }).catch((e) => notice(e.kind === 'reseau' ? 'Pas de réseau.' : e.kind === 'auth' ? 'Session expirée : reconnecte-toi.' : 'Erreur : ' + e.message));
+  }
+  function plMenu() {
+    modalKey = 'plmenu';
+    modal((box) => {
+      box.append(el('h2', '', 'Plateau · ' + PL.id));
+      box.append(el('p', 'sub', 'Affichage seul : personne ne joue sur le plateau.'));
+      const actions = el('div', 'actions');
+      const quit = el('button', 'btn primary', 'Quitter le plateau'); quit.id = 'pl-quit';
+      quit.addEventListener('click', () => goHome());
+      const close = el('button', 'btn ghost', 'Fermer'); close.addEventListener('click', () => { closeModal(); modalKey = ''; if (PL) plRender(); });
+      actions.append(quit, close);
+      box.append(actions);
+    });
   }
 
   async function hostRun(o) {
@@ -1103,7 +1265,7 @@
   /* ---------- Démarrage ---------- */
 
   window.addEventListener('DOMContentLoaded', () => {
-    $('#btn-menu').addEventListener('click', showMenu);
+    $('#btn-menu').addEventListener('click', () => (PL ? plMenu() : showMenu()));
     showMenu();
     if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
       navigator.serviceWorker.register('sw.js').catch(() => { /* hors ligne non dispo */ });

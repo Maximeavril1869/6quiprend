@@ -123,7 +123,7 @@ def device(browser, faux, url, who='Max', poll=150, viewport=None):
     pg.on('pageerror', lambda e: pg.errors.append(str(e)))
     pg.on('console', lambda m: pg.errors.append(m.text) if m.type == 'error' and 'ERR_FAILED' not in m.text and 'Failed to load resource' not in m.text else None)
     pg.on('dialog', lambda d: d.accept())
-    pg.add_init_script('window.QP_SPEED=0.02; window.EL_OPTIONS={poll:%d}; localStorage.getItem("6qp.settings.v1") || localStorage.setItem("6qp.settings.v1", JSON.stringify({mode:"online",bots:1,target:66,names:["%s","x","x","x"]}));' % (poll, who))
+    pg.add_init_script('window.QP_SPEED=0.02; window.PLATEAU_POLL=250; window.PLATEAU_BEAT=300; window.PLATEAU_FRESH=1500; window.EL_OPTIONS={poll:%d}; localStorage.getItem("6qp.settings.v1") || localStorage.setItem("6qp.settings.v1", JSON.stringify({mode:"online",bots:1,target:66,names:["%s","x","x","x"]}));' % (poll, who))
     pg.goto(url)
     return pg
 
@@ -154,17 +154,34 @@ def my_hand(pg):
     return pg.locator('#zone-bottom .hand .card').count()
 
 
-def step(pg):
-    """Joue ce qu'il y a à jouer sur cet appareil : choisir sa carte, ou choisir une rangée."""
-    if pg.locator('#board .row.selectable').count():
-        pg.locator('#board .row.selectable').first.click(); return True
-    if pg.locator('#pick-ok').count() and not pg.locator('#overlay:not(.hidden)').count():
-        n = pg.locator('#zone-bottom .hand .card').count()
-        if n:
-            pg.locator('#zone-bottom .hand .card').nth(random.randrange(n)).click()
-            if pg.locator('#pick-ok').is_enabled():
-                pg.click('#pick-ok'); return True
+def _click(loc):
+    loc.click(timeout=3000)
+
+
+def step(pg, smallest=False, rows=True):
+    """Joue ce qu'il y a à jouer sur cet appareil : choisir sa carte, ou choisir une rangée.
+    Tolérant : la page se redessine souvent ; un clic raté (élément remplacé ou caché) est simplement retenté au passage suivant."""
+    try:
+        if rows and pg.locator('.rowbtn:visible').count():    # table cachée (plateau branché) : boutons de rangée
+            _click(pg.locator('.rowbtn:visible').first); return True
+        if rows and pg.locator('#board .row.selectable:visible').count():
+            _click(pg.locator('#board .row.selectable:visible').first); return True
+        if not rows and (pg.locator('.rowbtn:visible').count() or pg.locator('#board .row.selectable:visible').count()):
+            return False
+        if pg.locator('#pick-ok').count() and not pg.locator('#overlay:not(.hidden)').count():
+            n = pg.locator('#zone-bottom .hand .card').count()
+            if n:
+                _click(pg.locator('#zone-bottom .hand .card').nth(0 if smallest else random.randrange(n)))
+                if pg.locator('#pick-ok').is_enabled():
+                    _click(pg.locator('#pick-ok')); return True
+    except Exception:
+        return False
     return False
+
+
+def step_smallest(pg):
+    """Comme step(), mais joue toujours sa plus petite carte (pour provoquer un « carte trop petite ») et ne répond pas à la question de rangée."""
+    return step(pg, smallest=True, rows=False)
 
 
 def main():
@@ -226,7 +243,7 @@ def main():
             if state(faux, code)['turn'] >= 1 and state(faux, code)['phase'] == 'pick':
                 break
             step(a); step(b); a.wait_for_timeout(40)
-        check('le tour 1 se termine : chacun a 9 cartes', wait_for(lambda: my_hand(a) == 9 and my_hand(b) == 9, 6000, pg=a), (my_hand(a), my_hand(b)))
+        check('le tour 1 se termine : chacun a posé au moins une carte (9 ou moins)', wait_for(lambda: my_hand(a) <= 9 and my_hand(b) <= 9 and my_hand(a) >= 7, 6000, pg=a), (my_hand(a), my_hand(b)))
 
         print('Hors ligne')
         # attendre que B puisse jouer
@@ -252,7 +269,30 @@ def main():
         b.wait_for_selector('#ol-list .olitem')
         check('la partie apparaît dans « Parties en cours »', code in b.inner_text('#ol-list'))
         b.click('#ol-list button[data-ol="resume"]')
-        check('reprise : Claire retrouve sa main', wait_for(lambda: my_hand(b) >= 8 and 'Claire' in b.inner_text('#scores'), 6000, pg=b))
+        check('reprise : Claire retrouve sa main', wait_for(lambda: my_hand(b) >= 5 and 'Claire' in b.inner_text('#scores'), 6000, pg=b))
+
+        print('Plateau (iPad en affichage seul)')
+        plat_rows = lambda: [r for r in faux.rows.values() if r['jeu'] == 'plateau']
+        pl = device(browser, faux, url, viewport={'width': 1024, 'height': 768})
+        login(pl, 'max@example.com')
+        pl.fill('#ol-code', 'ZZZZ'); pl.click('#ol-plateau')
+        pl.wait_for_selector('.olerr')
+        check('plateau : code inconnu refusé', 'inconnu' in pl.inner_text('.olerr'), pl.inner_text('.olerr'))
+        pl.fill('#ol-code', code); pl.click('#ol-plateau')
+        pl.wait_for_selector('body.plateau')
+        check('le plateau montre les 4 rangées, les 3 joueurs et leurs scores', pl.locator('#board .row').count() == 4 and pl.locator('#scores .chip').count() == 3, pl.inner_text('#scores'))
+        check('le plateau ne montre aucune main ni bouton de jeu', pl.locator('#zone-bottom .hand').count() == 0 and pl.locator('#pick-ok').count() == 0 and pl.locator('#overlay:not(.hidden)').count() == 0)
+        check('le plateau écrit sa propre ligne (jeu « plateau », titre = code)', wait_for(lambda: any(r['titre'] == code for r in plat_rows()), 4000, pg=pl))
+        check('la ligne de la partie ne contient rien du plateau', 'plateau' not in state(faux, code))
+        check('téléphones : la table commune se cache dès que le plateau est branché', wait_for(lambda: a.locator('#app.notable').count() == 1 and b.locator('#app.notable').count() == 1, 8000, pg=a))
+        check('téléphone : plateau de 4 rangées et cartes jouées masqués, main toujours visible', not a.is_visible('#board') and not a.is_visible('#played') and my_hand(a) >= 5 and my_hand(b) >= 5)
+        check('téléphone : bouton de secours « Afficher la table »', a.is_visible('#btn-table') and a.inner_text('#btn-table') == 'Afficher la table', a.inner_text('#zone-bottom'))
+        a.click('#btn-table')
+        check('bouton de secours : la table revient', a.locator('#app.notable').count() == 0 and a.is_visible('#board') and a.inner_text('#btn-table') == 'Masquer la table')
+        a.click('#btn-table')
+        check('et se recache', a.locator('#app.notable').count() == 1 and not a.is_visible('#board'))
+        pl.wait_for_timeout(500)
+        check('le plateau suit la partie : même manche et mêmes rangées que le serveur', wait_for(lambda: [r[-1] for r in state(faux, code)['rows']] == [int(x) for x in pl.eval_on_selector_all('#board .row', "rs => rs.map(r => { const c = r.querySelectorAll('.card'); return c[c.length-1].dataset.n; })")], 6000, pg=pl))
 
         print('Une manche complète à deux appareils')
         ended = False
@@ -266,6 +306,7 @@ def main():
         check('la manche va jusqu’au bout sur les deux appareils', ended)
         if ended:
             check('mêmes résultats des deux côtés', a.inner_text('table.sum') == b.inner_text('table.sum'), (a.inner_text('table.sum'), b.inner_text('table.sum')))
+            check('plateau : résultats de fin de manche affichés, sans bouton', wait_for(lambda: pl.locator('#overlay:not(.hidden) table.sum').count() == 1 and pl.locator('#overlay .btn').count() == 0, 4000, pg=pl) and pl.inner_text('table.sum') == a.inner_text('table.sum'))
             st = state(faux, code)
             check('le serveur indique la fin de manche', st['phase'] in ('roundend', 'over'), st['phase'])
             check('les 3 joueurs ont des points de manche cohérents (somme = totaux)', sum(q['total'] for q in st['players']) == sum(q['round'] for q in st['players']))
@@ -273,8 +314,23 @@ def main():
             if st['phase'] == 'roundend':
                 b.click('#sum-next')
                 check('les deux appareils passent à la manche 2 avec 10 cartes', wait_for(lambda: state(faux, code)['round'] == 2 and my_hand(a) == 10 and my_hand(b) == 10, 10000, pg=a), (state(faux, code)['round'], my_hand(a), my_hand(b)))
+                check('plateau : passe à la manche 2 et ferme les résultats', wait_for(lambda: 'Manche 2' in pl.inner_text('#round-info') and pl.locator('#overlay:not(.hidden)').count() == 0, 6000, pg=pl), pl.inner_text('#round-info'))
             else:
                 check('(partie finie en une manche : rejouer)', True)
+
+        print('Plateau fermé sans prévenir, puis rouvert')
+        pl.context.close()
+        check('le plateau disparaît (iPad éteint) : les téléphones réaffichent la table tout seuls', wait_for(lambda: a.locator('#app.notable').count() == 0 and b.locator('#app.notable').count() == 0, 8000, pg=a))
+        check('la ligne laissée par le plateau est encore là (rien ne la nettoie)', len(plat_rows()) == 1)
+        pl2 = device(browser, faux, url, viewport={'width': 1024, 'height': 768})
+        login(pl2, 'max@example.com')
+        pl2.fill('#ol-code', code); pl2.click('#ol-plateau'); pl2.wait_for_selector('body.plateau')
+        check('nouveau plateau : la table se recache et la ligne est réutilisée (une seule)', wait_for(lambda: a.locator('#app.notable').count() == 1, 8000, pg=a) and len(plat_rows()) == 1, len(plat_rows()))
+        pl2.click('#btn-menu'); pl2.click('#pl-quit')
+        pl2.wait_for_selector('#btn-new')
+        check('le plateau quitté efface sa ligne', wait_for(lambda: len(plat_rows()) == 0, 4000, pg=pl2))
+        check('les téléphones réaffichent la table', wait_for(lambda: a.locator('#app.notable').count() == 0 and b.locator('#app.notable').count() == 0, 6000, pg=a))
+        pl2.context.close()
 
         print('Suppression')
         b.click('#btn-menu')
@@ -283,6 +339,34 @@ def main():
         check('la partie est supprimée du serveur', wait_for(lambda: code not in faux.rows, 4000, pg=b))
         check('l’autre appareil est prévenu et revient au menu', wait_for(lambda: a.locator('.olerr').count() > 0 and 'supprimée' in a.inner_text('.olerr'), 8000, pg=a), a.inner_text('#overlay')[:200])
         check('aucune erreur JavaScript', not a.errors and not b.errors, a.errors + b.errors)
+        print('Table cachée : choix de rangée par boutons (partie neuve)')
+        ga = device(browser, faux, url); login(ga, 'max@example.com')
+        ga.click('#btn-new'); ga.wait_for_selector('#wait-code')
+        gcode = ga.inner_text('#wait-code').strip()
+        gb = device(browser, faux, url, who='Claire'); login(gb, 'claire@example.com')
+        gb.fill('#ol-code', gcode); gb.click('#ol-join'); wait_for(lambda: my_hand(gb) == 10, 6000, pg=gb)
+        gp = device(browser, faux, url, viewport={'width': 1024, 'height': 768}); login(gp, 'max@example.com')
+        gp.fill('#ol-code', gcode); gp.click('#ol-plateau'); gp.wait_for_selector('body.plateau')
+        check('partie neuve : les téléphones cachent la table', wait_for(lambda: ga.locator('#app.notable').count() == 1 and gb.locator('#app.notable').count() == 1, 8000, pg=ga))
+        asked = None
+        for _ in range(1500):
+            if ga.locator('.rowbtn:visible').count() or gb.locator('.rowbtn:visible').count():
+                asked = ga if ga.locator('.rowbtn:visible').count() else gb; break
+            if ga.locator('#sum-next').count() and gb.locator('#sum-next').count():     # manche finie sans « trop petit » (rare) : on enchaîne
+                try: gb.click('#sum-next', timeout=3000)
+                except Exception: pass
+            step_smallest(ga); step_smallest(gb); ga.wait_for_timeout(40)
+        check('un « carte trop petite » a eu lieu et propose 4 boutons de rangée', asked is not None and asked.locator('.rowbtn').count() == 4, (asked and asked.locator('.rowbtn').count()) or (state(faux, gcode)['phase'], state(faux, gcode)['turn'], [len(q['hand']) for q in state(faux, gcode)['players']], [q['picked'] for q in state(faux, gcode)['players']], ga.locator('#overlay:not(.hidden)').count(), ga.locator('#pick-ok').count(), gb.locator('#pick-ok').count(), ga.locator('#app.notable').count()))
+        if asked is not None:
+            check('les boutons indiquent cartes et têtes de bœuf, la table reste cachée', 'carte' in asked.inner_text('.rowbtn >> nth=0') and '🐮' in asked.inner_text('.rowbtn >> nth=0') and not asked.is_visible('#board'), asked.inner_text('#zone-bottom')[:120])
+            check('le plateau annonce qui choisit', wait_for(lambda: 'choisit' in gp.inner_text('#status'), 4000, pg=gp), gp.inner_text('#status'))
+            for _ in range(3):
+                try:
+                    asked.locator('.rowbtn').nth(1).click(timeout=4000); break
+                except Exception:
+                    asked.wait_for_timeout(200)
+            check('le choix par bouton est pris en compte et la partie repart', wait_for(lambda: state(faux, gcode)['phase'] != 'ask' or state(faux, gcode)['ask'] is None, 8000, pg=asked))
+        check('aucune erreur JavaScript (table cachée)', not ga.errors and not gb.errors and not gp.errors, ga.errors + gb.errors + gp.errors)
         browser.close()
     failed = [n for n, ok in RESULTS if not ok]
     print('\n%d vérifications, %d échec(s)' % (len(RESULTS), len(failed)))

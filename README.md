@@ -9,6 +9,8 @@ Le jeu de cartes **6 qui prend**, jouable en local dans le navigateur, installab
 
 Les anciens modes « passe-passe » et « face à face » ont été remplacés par l'en ligne.
 
+**Plateau** : un iPad peut s'afficher en « plateau » (menu → En ligne → saisir le code → « Ouvrir comme plateau ») : affichage commun en lecture seule, personne ne joue dessus (les 4 rangées, les cartes révélées dans l'ordre, les scores, les résultats de fin de manche). Tant qu'un plateau est branché, les téléphones cachent la table commune et ne gardent que la main du joueur et ses boutons ; si une carte est trop petite, la rangée à ramasser se choisit avec 4 boutons. Un bouton « Afficher la table » reste disponible. Si le plateau disparaît, la table revient toute seule après ~30 s.
+
 De 2 à 10 joueurs au total. Fin de partie : *partie à 66* (on enchaîne les manches) ou *une seule manche*.
 La partie en cours est sauvegardée à chaque tour (bouton « Reprendre » dans le menu ☰).
 
