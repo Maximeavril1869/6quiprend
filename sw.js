@@ -1,8 +1,8 @@
 /* Service worker : met l'application en cache pour jouer hors ligne.
    Les fichiers sont toujours revalidés auprès du serveur (cache: 'no-cache') : le cache HTTP du navigateur ne peut plus
    mélanger un vieux index.html avec un nouveau script. Les fichiers portent ?v=N (index.html), à changer avec CACHE à chaque livraison. */
-var CACHE = '6quiprend-v6';
-var FILES = ['./', './index.html', './style.css?v=6', './engine.js?v=6', './en-ligne.js?v=6', './game.js?v=6', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/icon.svg'];
+var CACHE = '6quiprend-v7';
+var FILES = ['./', './index.html', './style.css?v=7', './engine.js?v=7', './en-ligne.js?v=7', './game.js?v=7', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/icon.svg'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) {

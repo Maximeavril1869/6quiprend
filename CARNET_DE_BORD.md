@@ -57,3 +57,7 @@ Opérations :
 2. `APP_VERSION` 6, cache `6quiprend-v6`, scripts `?v=6`.
 3. Le réglage de barre d'état n'est lu qu'à l'installation : supprimer l'icône de l'écran d'accueil puis la rajouter depuis Safari.
 4. Tests : moteur + e2e en ligne (60) + solo OK.
+
+## 2026-11-14 — Version 7 : marge haute alignée
+1. Marge haute 34 px → 28 px, comme les autres jeux (demande de l'auteur).
+2. `APP_VERSION` 7, cache `6quiprend-v7`, scripts `?v=7`. Tests : e2e en ligne + solo OK.
