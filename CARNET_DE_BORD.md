@@ -46,3 +46,8 @@ Opérations :
 2. `style.css` : `body.plateau` (cartes agrandies, textes plus grands), `#app.notable`, `.rowbtns`.
 3. Tests : `tests/e2e/en_ligne.py` passe à 60 vérifications (plateau, masquage et retour de la table, plateau fermé sans prévenir puis rouvert, fin de manche sur le plateau, choix de rangée par boutons dans une partie neuve). Les clics du script sont devenus tolérants (éléments visibles, délai court) : la page se redessine souvent et l'ancienne version se bloquait parfois. Exécuté 6 fois en parallèle sans échec.
 4. `APP_VERSION` 4, cache `6quiprend-v4`.
+
+## 2026-11-14 — livraison v5 : marge haute iPhone + correctif de cache
+1. En-tête descendu sous la zone floutée d'iOS (iPhone, appli installée) : marge haute supplémentaire (même principe que 5 Rois v15, à valider sur l'appareil de l'auteur).
+2. Cache : fichiers versionnés `?v=5` dans index.html et sw.js, installation du service worker avec `cache: 'reload'`, requêtes avec `cache: 'no-cache'`, réseau d'abord puis cache hors ligne. Version et nom du cache incrémentés ensemble.
+3. Tests e2e OK.

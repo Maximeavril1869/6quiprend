@@ -35,7 +35,7 @@ button { font: inherit; color: inherit; }
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: calc(env(safe-area-inset-top) + 6px) calc(env(safe-area-inset-right) + 10px) calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 10px);
+  padding: calc(env(safe-area-inset-top) + 34px) calc(env(safe-area-inset-right) + 10px) calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 10px);
   overflow-y: auto;
 }
 
