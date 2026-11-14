@@ -154,6 +154,13 @@ def my_hand(pg):
     return pg.locator('#zone-bottom .hand .card').count()
 
 
+def main_ok(pg):
+    """7 à 9 cartes en main ; ou 0 affichée parce que la carte du tour suivant vient d'être choisie (la main est alors masquée :
+    la boucle de test joue sur les deux appareils et peut avoir déjà joué le tour 2 quand on lit la main)."""
+    n = my_hand(pg)
+    return n <= 9 and (n >= 7 or (n == 0 and 'ta carte est choisie' in pg.inner_text('body')))
+
+
 def _click(loc):
     loc.click(timeout=3000)
 
@@ -243,7 +250,7 @@ def main():
             if state(faux, code)['turn'] >= 1 and state(faux, code)['phase'] == 'pick':
                 break
             step(a); step(b); a.wait_for_timeout(40)
-        check('le tour 1 se termine : chacun a posé au moins une carte (9 ou moins)', wait_for(lambda: my_hand(a) <= 9 and my_hand(b) <= 9 and my_hand(a) >= 7, 6000, pg=a), (my_hand(a), my_hand(b)))
+        check('le tour 1 se termine : chacun a posé au moins une carte (9 ou moins)', wait_for(lambda: main_ok(a) and main_ok(b), 6000, pg=a), (my_hand(a), my_hand(b)))
 
         print('Hors ligne')
         # attendre que B puisse jouer

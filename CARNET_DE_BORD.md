@@ -61,3 +61,7 @@ Opérations :
 ## 2026-11-14 — Version 7 : marge haute alignée
 1. Marge haute 34 px → 28 px, comme les autres jeux (demande de l'auteur).
 2. `APP_VERSION` 7, cache `6quiprend-v7`, scripts `?v=7`. Tests : e2e en ligne + solo OK.
+
+## 2026-11-14 — Test e2e stabilisé (pas de changement de version)
+1. Le contrôle « le tour 1 se termine … (9 ou moins) » échouait ~3 fois sur 10 : la boucle de test joue sur les deux appareils et pouvait déjà avoir joué le tour 2 de Max, dont la main est alors masquée (0 carte lue). Défaut du test, pas du jeu.
+2. `main_ok()` accepte ce cas. 12 exécutions de suite : 60 vérifications, 0 échec.
